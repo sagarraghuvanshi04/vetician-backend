@@ -8,16 +8,20 @@ const app = express();
 /* =========================
    CORS Middleware (FIRST - before everything)
 ========================= */
-app.use('*', (req, res, next) => {
+app.use((req, res, next) => {
+  // Set CORS headers for all requests
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Max-Age', '86400'); // 24 hours
   
+  // Handle preflight OPTIONS requests
   if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-    return;
+    console.log('Handling OPTIONS preflight for:', req.url);
+    return res.status(200).end();
   }
   
+  console.log(`${req.method} ${req.url} - Origin: ${req.headers.origin}`);
   next();
 });
 
