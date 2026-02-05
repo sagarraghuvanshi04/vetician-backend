@@ -12,25 +12,11 @@ const parentRoutes = require('./routes/parentRoutes');
 const app = express();
 
 /* =========================
-   CORS Middleware (Fixed)
+   CORS Middleware (Must be first)
 ========================= */
-
-const allowedOrigins = [
-  'http://localhost:3000',   // Web frontend
-  'exp://127.0.0.1:19000',   // React Native Expo
-  // Agar mobile device se LAN testing: add IP
-  'http://192.168.1.100:3000'
-];
-
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  } else {
-    res.header('Access-Control-Allow-Origin', '*'); // Postman / undefined origin
-  }
-
+  // Allow all origins during development
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header(
     'Access-Control-Allow-Headers',
@@ -48,11 +34,11 @@ app.use((req, res, next) => {
 });
 
 /* =========================
-   Helmet Security
+   Helmet Security (Disabled for CORS testing)
 ========================= */
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+// app.use(helmet({
+//   crossOriginResourcePolicy: { policy: "cross-origin" }
+// }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -61,7 +47,18 @@ app.use(express.urlencoded({ extended: true }));
    Logger (Debug)
 ========================= */
 app.use((req, res, next) => {
-  console.log(`[${req.method}] ${req.url} - Origin: ${req.headers.origin} - Auth: ${req.header('Authorization') ? 'Yes' : 'No'}`);
+  console.log(`[${req.method}] ${req.url} - Origin: ${req.headers.origin}`);
+  
+  // Set CORS headers again for debugging
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    console.log('Handling OPTIONS preflight request');
+    return res.sendStatus(200);
+  }
+  
   next();
 });
 
@@ -94,6 +91,15 @@ app.use('/api/parents', parentRoutes);
 ========================= */
 app.get('/', (req, res) => {
   res.send('🚀 Server is running & DB connected');
+});
+
+// Test endpoint for CORS
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'CORS is working!', timestamp: new Date().toISOString() });
+});
+
+app.post('/api/test', (req, res) => {
+  res.json({ message: 'POST request successful!', body: req.body });
 });
 
 /* =========================
