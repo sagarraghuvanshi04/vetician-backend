@@ -3,64 +3,32 @@ const mongoose = require('mongoose');
 const helmet = require('helmet');
 require('dotenv').config();
 
+const app = express();
+
+/* =========================
+   CORS Middleware (FIRST - before everything)
+========================= */
+app.use('*', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  
+  next();
+});
+
 // IMPORT ROUTES
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const paravetRoutes = require('./routes/paravetRoutes');
 const parentRoutes = require('./routes/parentRoutes');
 
-const app = express();
-
-/* =========================
-   CORS Middleware (Must be first)
-========================= */
-app.use((req, res, next) => {
-  // Allow all origins during development
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning'
-  );
-  res.header(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-  );
-
-  // Preflight request
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-
-  next();
-});
-
-/* =========================
-   Helmet Security (Disabled for CORS testing)
-========================= */
-// app.use(helmet({
-//   crossOriginResourcePolicy: { policy: "cross-origin" }
-// }));
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-/* =========================
-   Logger (Debug)
-========================= */
-app.use((req, res, next) => {
-  console.log(`[${req.method}] ${req.url} - Origin: ${req.headers.origin}`);
-  
-  // Set CORS headers again for debugging
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    console.log('Handling OPTIONS preflight request');
-    return res.sendStatus(200);
-  }
-  
-  next();
-});
 
 /* =========================
    MongoDB Connection
