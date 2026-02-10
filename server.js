@@ -9,30 +9,25 @@ const app = express();
    CORS Middleware (FIRST - before everything)
 ========================= */
 app.use((req, res, next) => {
-  // Set CORS headers for all requests
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning');
-  res.header('Access-Control-Max-Age', '86400'); // 24 hours
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
-  // Handle preflight OPTIONS requests
   if (req.method === 'OPTIONS') {
-    console.log('Handling OPTIONS preflight for:', req.url);
-    return res.status(200).end();
+    return res.status(204).end();
   }
-  
-  console.log(`${req.method} ${req.url} - Origin: ${req.headers.origin}`);
   next();
 });
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // IMPORT ROUTES
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const paravetRoutes = require('./routes/paravetRoutes');
 const parentRoutes = require('./routes/parentRoutes');
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const doorstepRoutes = require('./routes/doorstepRoutes');
 
 /* =========================
    MongoDB Connection
@@ -57,6 +52,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/paravet', paravetRoutes);
 app.use('/api/parents', parentRoutes);
+app.use('/api/doorstep', doorstepRoutes);
 
 /* =========================
    Health Check
