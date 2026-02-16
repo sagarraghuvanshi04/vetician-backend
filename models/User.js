@@ -30,8 +30,8 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     required: [true, 'Role is required'],
-    enum: ['veterinarian', 'vetician', 'paravet', 'pet_resort'], // Updated with new roles
-    default: 'vetician'
+    enum: ['veterinarian', 'pet_parent', 'paravet', 'pet_resort'],
+    default: 'pet_parent'
   },
   phone: {
     type: String,
