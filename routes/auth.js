@@ -61,10 +61,10 @@ const registerValidation = [
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long'),
 
-  body('loginType')
+  body('role')
     .optional()
-    .isIn(['veterinarian', 'vetician', 'paravet', 'pet_resort'])
-    .withMessage('Invalid login type')
+    .isIn(['veterinarian', 'pet_parent', 'paravet', 'pet_resort'])
+    .withMessage('Invalid role')
 ];
 
 const loginValidation = [
@@ -78,7 +78,7 @@ const loginValidation = [
     .withMessage('Password is required'),
 
   body('loginType')
-    .isIn(['veterinarian', 'vetician', 'paravet', 'pet_resort'])
+    .isIn(['veterinarian', 'pet_parent', 'paravet', 'pet_resort'])
     .withMessage('Invalid login type')
 ];
 
@@ -99,8 +99,27 @@ router.post('/delete-account', auth, deleteAccount);
    PARENT ROUTES
 ========================= */
 
+const parentUpdateValidation = [
+  body('name')
+    .trim()
+    .isLength({ min: 2 })
+    .withMessage('Name is required and must be at least 2 characters'),
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Valid email is required'),
+  body('phone')
+    .matches(/^[0-9]{10,15}$/)
+    .withMessage('Valid phone number is required (10-15 digits)'),
+  body('address')
+    .trim()
+    .isLength({ min: 10 })
+    .withMessage('Complete address is required (minimum 10 characters)')
+];
+
 router.post('/parent-register', registerParent);
 router.get('/parents/:userId', getParentById);
+router.put('/parent/:userId', auth, parentUpdateValidation, validate, updateParent);
 router.patch('/parents/:id', updateParent);
 router.delete('/parents/:id', deleteParent);
 

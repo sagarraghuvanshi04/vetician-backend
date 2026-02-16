@@ -65,7 +65,7 @@ const veterinarianSchema = new mongoose.Schema({
       type: String,
       required: [true, 'Specialization is required'],
       trim: true,
-      enum: ['Veterinarian', 'Vetician', 'Surgeon', 'Dermatologist', 'Other']
+      enum: ['Veterinarian', 'Surgeon', 'Dermatologist', 'Other']
     },
     verified: {
       type: Boolean,

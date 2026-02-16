@@ -77,28 +77,45 @@ const deleteAccount = catchAsync(async (req, res, next) => {
 // Get dashboard summary for Veterinarians
 const getDashboardStats = catchAsync(async (req, res, next) => {
   
-  if (req.user.role !== 'veterinarian') {
-    return next(new AppError('Access denied. Only veterinarians can access this dashboard.', 403));
+  // Allow different stats based on role
+  if (req.user.role === 'veterinarian') {
+    const stats = {
+      patients: 24,
+      appointments: 12,
+      surgeries: 3,
+    };
+
+    const recentPatients = [
+      { id: '1', name: 'Max', breed: 'Golden Retriever', time: '10:00 AM', status: 'Annual checkup' },
+      { id: '2', name: 'Whiskers', breed: 'Persian Cat', time: '11:30 AM', status: 'Vaccination' },
+      { id: '3', name: 'Rocky', breed: 'German Shepherd', time: '2:00 PM', status: 'Post-op' },
+    ];
+
+    return res.status(200).json({
+      success: true,
+      stats,
+      recentPatients
+    });
   }
-
   
-  const stats = {
-    patients: 24, // Placeholder: await Patient.countDocuments({ vetId: req.user._id })
-    appointments: 12,
-    surgeries: 3,
-  };
+  // For pet parents
+  if (req.user.role === 'pet_parent') {
+    const stats = {
+      pets: 0,
+      appointments: 0,
+      bookings: 0,
+    };
 
-  // 3. Recent activities/patients fetch karein
-  const recentPatients = [
-    { id: '1', name: 'Max', breed: 'Golden Retriever', time: '10:00 AM', status: 'Annual checkup' },
-    { id: '2', name: 'Whiskers', breed: 'Persian Cat', time: '11:30 AM', status: 'Vaccination' },
-    { id: '3', name: 'Rocky', breed: 'German Shepherd', time: '2:00 PM', status: 'Post-op' },
-  ];
-
-  res.status(200).json({
+    return res.status(200).json({
+      success: true,
+      stats
+    });
+  }
+  
+  // For other roles
+  return res.status(200).json({
     success: true,
-    stats,
-    recentPatients
+    stats: {}
   });
 });
 

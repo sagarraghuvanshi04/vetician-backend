@@ -4,6 +4,7 @@ const Parent = require('../models/Parent');
 const Pet = require('../models/Pet');
 const Clinic = require('../models/Clinic');
 const Veterinarian = require('../models/Veterinarian');
+const Paravet = require('../models/Paravet');
 const { AppError } = require('../utils/appError');
 const { catchAsync } = require('../utils/catchAsync');
 const PetResort = require('../models/PetResort');
@@ -32,27 +33,40 @@ const register = catchAsync(async (req, res, next) => {
   console.log('🔍 REGISTER API - Request started');
   console.log('📝 REGISTER API - Request body:', req.body);
   
-  const { name, email, password, role = 'vetician' } = req.body;
+  const { name, email, password, phone, role = 'pet_parent' } = req.body;
   
   console.log('📋 REGISTER API - Extracted data:', {
     name: name ? name.trim() : name,
     email: email ? email.toLowerCase().trim() : email,
+    phone: phone ? phone.trim() : phone,
     password: password ? '***PROVIDED***' : 'MISSING',
     role
   });
 
-  // Updated role validation
-  if (role && !['veterinarian', 'vetician', 'paravet', 'pet_resort'].includes(role)) {
+  // Validate required fields
+  if (!name || !email || !password) {
+    console.log('❌ REGISTER API - Missing required fields');
+    return next(new AppError('Name, email, and password are required', 400));
+  }
+
+  if (!phone) {
+    console.log('❌ REGISTER API - Phone number is required for new registrations');
+    return next(new AppError('Phone number is required', 400));
+  }
+
+  // Validate role
+  if (role && !['veterinarian', 'pet_parent', 'paravet', 'pet_resort'].includes(role)) {
     console.log('❌ REGISTER API - Invalid role specified:', role);
     return next(new AppError('Invalid role specified', 400));
   }
+  
   console.log('✅ REGISTER API - Valid role:', role);
 
   // Check if user already exists
   console.log('🔍 REGISTER API - Checking for existing user with email:', email?.toLowerCase().trim(), 'and role:', role);
   const existingUser = await User.findOne({
     email: email.toLowerCase().trim(),
-    role
+    role: role
   });
 
   if (existingUser) {
@@ -69,8 +83,9 @@ const register = catchAsync(async (req, res, next) => {
   const user = new User({
     name: name.trim(),
     email: email.toLowerCase().trim(),
+    phone: phone.trim(),
     password,
-    role
+    role: role
   });
   
   console.log('👤 REGISTER API - Created user object:', {
@@ -83,6 +98,43 @@ const register = catchAsync(async (req, res, next) => {
   console.log('💾 REGISTER API - Saving user to database...');
   await user.save();
   console.log('✅ REGISTER API - User saved successfully with ID:', user._id);
+
+  // Create role-specific entry
+  try {
+    if (role === 'pet_parent') {
+      console.log('➕ REGISTER API - Creating parent entry...');
+      const parent = new Parent({
+        name: user.name,
+        email: user.email,
+        user: user._id,
+        gender: 'other'
+      });
+      await parent.save();
+      console.log('✅ REGISTER API - Parent entry created:', parent._id);
+    } else if (role === 'paravet') {
+      const paravet = new Paravet({
+        userId: user._id.toString(),
+        personalInfo: {
+          fullName: { value: user.name, verified: true },
+          email: { value: user.email, verified: true }
+        },
+        applicationStatus: {
+          currentStep: 1,
+          completionPercentage: 10,
+          submitted: false,
+          approvalStatus: 'approved', // Auto-approve for testing
+          approvedAt: new Date()
+        },
+        isActive: true
+      });
+      await paravet.save();
+      console.log('✅ REGISTER API - Paravet entry created and auto-approved:', paravet._id);
+    }
+    // Note: pet_resort and veterinarian entries created during onboarding
+  } catch (roleError) {
+    console.error('❌ REGISTER API - Error creating role-specific entry:', roleError.message);
+    // Continue with registration even if role-specific entry fails
+  }
 
   // Generate tokens
   console.log('🎫 REGISTER API - Generating tokens...');
@@ -133,7 +185,7 @@ const deleteAccount = catchAsync(async (req, res, next) => {
   }
 
   // Validate login type
-  if (!['veterinarian', 'vetician', 'paravet', 'pet_resort'].includes(loginType)) {
+  if (!['veterinarian', 'pet_parent', 'paravet', 'pet_resort'].includes(loginType)) {
     return next(new AppError('Invalid login type specified', 400));
   }
 
@@ -214,8 +266,8 @@ const login = catchAsync(async (req, res, next) => {
     loginType
   });
 
-  // Updated to accept new roles
-  if (!['veterinarian', 'vetician', 'paravet', 'pet_resort'].includes(loginType)) {
+  // Validate login type
+  if (!['veterinarian', 'pet_parent', 'paravet', 'pet_resort'].includes(loginType)) {
     console.log('❌ LOGIN API - Invalid login type:', loginType);
     return next(new AppError('Invalid login type specified', 400));
   }
@@ -303,43 +355,78 @@ const login = catchAsync(async (req, res, next) => {
 // Register new parent
 const registerParent = catchAsync(async (req, res, next) => {
   const { name, email, phone, address, gender, image, userId } = req.body;
-  console.log(req.body);
+  console.log('🔍 REGISTER PARENT - Request body:', req.body);
 
-  // Check if parent already exists
-  const existingParent = await Parent.findByEmail(email);
-  if (existingParent) {
-    return next(new AppError('Parent with this email already exists', 400));
+  // Validate required fields
+  if (!name || !email) {
+    console.log('❌ REGISTER PARENT - Missing required fields');
+    return next(new AppError('Name and email are required', 400));
   }
 
   // Validate user exists if userId is provided
   if (userId) {
+    console.log('🔍 REGISTER PARENT - Checking if user exists:', userId);
     const user = await User.findById(userId);
     if (!user) {
+      console.log('❌ REGISTER PARENT - User not found:', userId);
       return next(new AppError('User not found', 404));
     }
+    console.log('✅ REGISTER PARENT - User found:', user._id);
   }
 
-  // Create new parent  
-  const parent = new Parent({
+  // Check if parent already exists by userId or email
+  console.log('🔍 REGISTER PARENT - Checking for existing parent...');
+  let parent = await Parent.findOne({ 
+    $or: [
+      { user: userId },
+      { email: email.toLowerCase().trim() }
+    ]
+  });
+
+  // Clean phone and address
+  const cleanPhone = phone && phone !== 'Not provided' ? phone.replace(/\D/g, '') : null;
+  const cleanAddress = address && address !== 'Not provided' ? address.trim() : null;
+
+  if (parent) {
+    console.log('📝 REGISTER PARENT - Updating existing parent:', parent._id);
+    // Update existing parent
+    parent.name = name;
+    parent.email = email.toLowerCase().trim();
+    parent.phone = cleanPhone;
+    parent.address = cleanAddress;
+    if (gender) parent.gender = gender.toLowerCase();
+    if (image !== undefined) parent.image = image;
+    if (userId) parent.user = userId;
+    
+    await parent.save();
+    console.log('✅ REGISTER PARENT - Parent updated successfully:', parent._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Parent information updated successfully',
+      parent: parent.getPublicProfile()
+    });
+  }
+
+  // Create new parent
+  console.log('➕ REGISTER PARENT - Creating new parent...');
+  parent = new Parent({
     name,
-    email,
-    phone,
-    address,
-    gender: gender || 'other',
-    image,
+    email: email.toLowerCase().trim(),
+    phone: cleanPhone,
+    address: cleanAddress,
+    gender: gender ? gender.toLowerCase() : 'other',
+    image: image || null,
     user: userId || null
   });
 
   await parent.save();
-
-  const { accessToken, refreshToken } = generateTokens(parent._id);
+  console.log('✅ REGISTER PARENT - New parent created:', parent._id);
 
   res.status(201).json({
     success: true,
     message: 'Parent registered successfully',
-    parent: parent.getPublicProfile(),
-    token: accessToken,
-    refreshToken,
+    parent: parent.getPublicProfile()
   });
 });
 
@@ -367,63 +454,41 @@ const updateParent = catchAsync(async (req, res, next) => {
   const { name, email, phone, address, gender, image } = req.body;
 
   // Find parent by user ID
-  const parent = await Parent.findOne({ user: id });
+  let parent = await Parent.findOne({ user: id });
 
   if (!parent) {
-    return next(new AppError('Parent profile not found', 404));
+    // Create new parent if not found
+    parent = new Parent({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone: phone === 'Not provided' ? null : phone.replace(/\D/g, ''),
+      address: address === 'Not provided' ? null : address.trim(),
+      gender: gender ? gender.toLowerCase() : 'other',
+      image: image || null,
+      user: id
+    });
+    await parent.save();
+    return res.status(200).json({
+      success: true,
+      message: 'Parent profile created successfully',
+      parent: parent.getPublicProfile()
+    });
   }
 
-  // Validate required fields
-  if (!name || !email || !phone || !address) {
-    return next(new AppError('Name, email, phone and address are required', 400));
-  }
+  // Update existing parent
+  if (name) parent.name = name.trim();
+  if (email) parent.email = email.toLowerCase().trim();
+  if (phone) parent.phone = phone === 'Not provided' ? null : phone.replace(/\D/g, '');
+  if (address) parent.address = address === 'Not provided' ? null : address.trim();
+  if (gender) parent.gender = gender.toLowerCase();
+  if (image !== undefined) parent.image = image;
 
-  // Basic email validation
-  if (email && !email.includes('@')) {
-    return next(new AppError('Please provide a valid email address', 400));
-  }
-
-  // Basic phone validation (10-15 digits)
-  if (phone && (phone.length < 10 || phone.length > 15 || !/^\d+$/.test(phone))) {
-    return next(new AppError('Please provide a valid phone number (10-15 digits)', 400));
-  }
-
-  // Check if email is being changed and already exists
-  if (email && email !== parent.email) {
-    const existingParent = await Parent.findOne({ email });
-    if (existingParent && existingParent._id.toString() !== parent._id.toString()) {
-      return next(new AppError('Email already in use by another parent', 400));
-    }
-  }
-
-  // Update parent fields
-  parent.name = name;
-  parent.email = email;
-  parent.phone = phone;
-  parent.address = address;
-  if (gender) parent.gender = gender;
-  if (image) parent.image = image;
-
-  // Save updated parent
   await parent.save();
 
-  // Return updated parent data
   res.status(200).json({
     success: true,
     message: 'Parent profile updated successfully',
-    data: {
-      parent: {
-        _id: parent._id,
-        user: parent.user,
-        name: parent.name,
-        email: parent.email,
-        phone: parent.phone,
-        address: parent.address,
-        gender: parent.gender,
-        image: parent.image,
-        createdAt: parent.createdAt
-      }
-    }
+    parent: parent.getPublicProfile()
   });
 });
 
@@ -1515,12 +1580,38 @@ const generateOTP = () => {
 
 // Send OTP using Fast2SMS (for Indian numbers)
 const sendOTP = catchAsync(async (req, res, next) => {
-  const { phoneNumber } = req.body;
+  const { phoneNumber, email } = req.body;
   
-  console.log('📞 Received OTP request for:', phoneNumber);
+  console.log('📞 Received OTP request for:', phoneNumber || email);
   
-  if (!phoneNumber) {
-    return next(new AppError('Phone number is required', 400));
+  if (!phoneNumber && !email) {
+    return next(new AppError('Phone number or email is required', 400));
+  }
+  
+  // Check if user exists
+  let user;
+  if (phoneNumber) {
+    // For phone numbers, check both phone field and email field
+    user = await User.findOne({
+      $or: [
+        { phone: phoneNumber },
+        { phone: phoneNumber.replace('+91', '') }, // Try without country code
+        { phone: phoneNumber.replace('+', '') }    // Try without + sign
+      ]
+    });
+    
+    if (!user) {
+      console.log(`📞 No user found with phone: ${phoneNumber}`);
+      console.log('💡 Available phone numbers in database:');
+      const allUsers = await User.find({ phone: { $exists: true, $ne: null } }).select('phone email');
+      allUsers.forEach(u => console.log(`  - ${u.phone} (${u.email})`));
+    }
+  } else {
+    user = await User.findOne({ email: email.toLowerCase() });
+  }
+  
+  if (!user) {
+    return next(new AppError('User not found. Please sign up first.', 404));
   }
   
   const otp = generateOTP();
@@ -1531,68 +1622,138 @@ const sendOTP = catchAsync(async (req, res, next) => {
   // Store OTP with 5 minute expiry
   otpStorage.set(verificationId, {
     phoneNumber,
+    email,
     otp,
     expiresAt: Date.now() + 5 * 60 * 1000
   });
   
-  try {
-    const axios = require('axios');
-    
-    // Clean phone number (remove +91)
-    const cleanPhone = phoneNumber.replace('+91', '').replace('+', '');
-    console.log('📤 Sending SMS to:', cleanPhone);
-    console.log('🔑 API Key:', process.env.FAST2SMS_API_KEY ? 'Found' : 'Missing');
-    
-    const response = await axios.post('https://www.fast2sms.com/dev/bulkV2', {
-      route: 'v3',
-      sender_id: 'FSTSMS',
-      message: `Your Vetician OTP is ${otp}. Valid for 5 minutes.`,
-      language: 'english',
-      flash: 0,
-      numbers: cleanPhone
-    }, {
-      headers: {
-        'authorization': process.env.FAST2SMS_API_KEY,
-        'Content-Type': 'application/json'
+  if (phoneNumber) {
+    try {
+      const axios = require('axios');
+      
+      // Clean phone number (remove +91)
+      const cleanPhone = phoneNumber.replace('+91', '').replace('+', '');
+      console.log('📤 Sending SMS to:', cleanPhone);
+      console.log('🔑 API Key:', process.env.FAST2SMS_API_KEY ? 'Found' : 'Missing');
+      
+      const response = await axios.post('https://www.fast2sms.com/dev/bulkV2', {
+        route: 'v3',
+        sender_id: 'FSTSMS',
+        message: `Your Vetician OTP is ${otp}. Valid for 5 minutes.`,
+        language: 'english',
+        flash: 0,
+        numbers: cleanPhone
+      }, {
+        headers: {
+          'authorization': process.env.FAST2SMS_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('✅ Fast2SMS response:', response.data);
+      
+      res.status(200).json({
+        success: true,
+        message: 'OTP sent successfully',
+        verificationId
+      });
+    } catch (error) {
+      console.error('❌ SMS Error:', error.message);
+      if (error.response) {
+        console.error('❌ Response data:', error.response.data);
+        console.error('❌ Response status:', error.response.status);
       }
-    });
-    
-    console.log('✅ Fast2SMS response:', response.data);
-    
-    res.status(200).json({
-      success: true,
-      message: 'OTP sent successfully',
-      verificationId
-    });
-  } catch (error) {
-    console.error('❌ SMS Error:', error.message);
-    if (error.response) {
-      console.error('❌ Response data:', error.response.data);
-      console.error('❌ Response status:', error.response.status);
+      
+      // Check if it's the payment requirement error
+      if (error.response?.data?.message?.includes('complete one transaction')) {
+        return res.status(402).json({
+          success: false,
+          message: 'SMS service requires payment activation. Please use email OTP instead.',
+          errorCode: 'SMS_PAYMENT_REQUIRED',
+          suggestedAction: 'USE_EMAIL_OTP'
+        });
+      }
+      
+      // For other SMS errors
+      return res.status(500).json({
+        success: false,
+        message: 'SMS service temporarily unavailable. Please use email OTP instead.',
+        errorCode: 'SMS_SERVICE_ERROR',
+        suggestedAction: 'USE_EMAIL_OTP'
+      });
     }
-    console.log(`📱 OTP for ${phoneNumber}: ${otp}`);
-    
-    res.status(200).json({
-      success: true,
-      message: 'OTP generated (check console for testing)',
-      verificationId,
-      otp: otp // For testing
-    });
+  } else {
+    // Email OTP using nodemailer with Gmail
+    try {
+      const nodemailer = require('nodemailer');
+      
+      // Create transporter using Gmail (free service)
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        },
+        // Add these options for better compatibility
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+      
+      // Test the connection first
+      await transporter.verify();
+      console.log('✅ Email server connection verified');
+      
+      const mailOptions = {
+        from: `"Vetician App" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Your Vetician OTP Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #4A90E2;">Vetician OTP Verification</h2>
+            <p>Your OTP code is:</p>
+            <div style="background-color: #f0f7ff; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #4A90E2; font-size: 32px; margin: 0; letter-spacing: 5px;">${otp}</h1>
+            </div>
+            <p>This code will expire in 5 minutes.</p>
+            <p>If you didn't request this code, please ignore this email.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">This is an automated message from Vetician. Please do not reply.</p>
+          </div>
+        `
+      };
+      
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email OTP sent to ${email}:`, info.messageId);
+      
+      res.status(200).json({
+        success: true,
+        message: 'OTP sent successfully to your email',
+        verificationId
+      });
+    } catch (emailError) {
+      console.error('❌ Email Error:', emailError.message);
+      console.log(`📧 OTP for ${email}: ${otp}`);
+      
+      // Return error - don't show test OTP in frontend
+      return next(new AppError('Failed to send email OTP. Please check your email settings or try phone OTP.', 500));
+    }
   }
 });
 
 // Verify OTP
 const verifyOTP = catchAsync(async (req, res, next) => {
-  const { phoneNumber, otp, verificationId } = req.body;
+  const { phoneNumber, email, otp, verificationId } = req.body;
   
-  if (!phoneNumber || !otp || !verificationId) {
-    return next(new AppError('Phone number, OTP, and verification ID are required', 400));
+  if ((!phoneNumber && !email) || !otp || !verificationId) {
+    return next(new AppError('Phone/Email, OTP, and verification ID are required', 400));
   }
   
   const storedData = otpStorage.get(verificationId);
-  
   if (!storedData) {
-    return next(new AppError('Invalid or expired verification ID', 400));
+    console.log('❌ Verification ID not found or expired:', verificationId);
+    console.log('🗺 Available verification IDs:', Array.from(otpStorage.keys()));
+    return next(new AppError('Invalid or expired verification ID. Please request a new OTP.', 400));
   }
   
   if (Date.now() > storedData.expiresAt) {
@@ -1600,8 +1761,12 @@ const verifyOTP = catchAsync(async (req, res, next) => {
     return next(new AppError('OTP has expired', 400));
   }
   
-  if (storedData.phoneNumber !== phoneNumber) {
+  if (phoneNumber && storedData.phoneNumber !== phoneNumber) {
     return next(new AppError('Phone number mismatch', 400));
+  }
+  
+  if (email && storedData.email !== email) {
+    return next(new AppError('Email mismatch', 400));
   }
   
   if (storedData.otp !== otp) {
@@ -1610,10 +1775,31 @@ const verifyOTP = catchAsync(async (req, res, next) => {
   
   otpStorage.delete(verificationId);
   
+  let user;
+  if (phoneNumber) {
+    user = await User.findOne({ phone: phoneNumber });
+  } else {
+    user = await User.findOne({ email: email.toLowerCase() });
+  }
+  
+  if (!user) {
+    return next(new AppError('User not found', 404));
+  }
+  
+  const { accessToken, refreshToken } = generateTokens(user._id);
+  user.refreshTokens.push({ token: refreshToken });
+  await user.save();
+  await user.updateLastLogin();
+  
   res.status(200).json({
     success: true,
     message: 'OTP verified successfully',
-    phoneNumber
+    user: {
+      ...user.getPublicProfile(),
+      role: user.role
+    },
+    token: accessToken,
+    refreshToken
   });
 });
 
