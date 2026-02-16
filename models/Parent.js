@@ -26,10 +26,11 @@ const parentSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: [true, 'Phone number is required'],
+    required: false,
     trim: true,
     validate: {
       validator: function(v) {
+        if (!v) return true;
         return /^[0-9]{10,15}$/.test(v);
       },
       message: props => `${props.value} is not a valid phone number!`
@@ -37,9 +38,15 @@ const parentSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: [true, 'Address is required'],
+    required: false,
     trim: true,
-    minlength: [10, 'Please enter a complete address'],
+    validate: {
+      validator: function(v) {
+        if (!v) return true;
+        return v.length >= 10;
+      },
+      message: 'Please enter a complete address (at least 10 characters)'
+    }
   },
   gender: {
     type: String,
